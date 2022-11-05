@@ -1,11 +1,8 @@
 
 use std::{fmt::{self}, error::Error, io};
-
 use clap::Parser;
 use prettytable::{Table, format, row};
 use rand::{seq::SliceRandom, thread_rng};
-
-use serde::{Serialize};
 
 #[derive(clap::ValueEnum, Clone, Debug,  Copy, PartialEq)]
 enum Operator {
@@ -26,20 +23,6 @@ impl fmt::Display for Operator {
     }
 }
 
-impl Serialize for Operator {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer {
-        match *self {
-            Operator::Plus => serializer.serialize_char('+'),
-            Operator::Minus => serializer.serialize_char('-'),
-            Operator::Multiplication => serializer.serialize_char('x'),
-            Operator::Division => serializer.serialize_char(':'),
-            }
-    }
-}
-
-
 #[derive(clap::ValueEnum, Clone, PartialEq)]
 enum OutputFormat {
     Html,
@@ -48,7 +31,7 @@ enum OutputFormat {
 
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(version)]
 struct Args {
     #[arg(long, default_value_t = 0)]
     min_first_operand: i32,
@@ -78,7 +61,6 @@ struct Args {
     output_format: OutputFormat
 }
 
-#[derive(Serialize)]
 struct Operation { 
     a: i32,
     b: i32,
@@ -179,7 +161,6 @@ fn write(operations: Vec<Operation>, output_format: OutputFormat) -> Result<(), 
         .build();
     table.set_format(format);
     
-    // table.set_titles(row!["Title 1", "Title 2"]);
     let chunks = operations.chunks_exact(3);
     for chunk in chunks {
         table.add_row(row![chunk[0], chunk[1], chunk[2]]);
@@ -194,6 +175,5 @@ fn write(operations: Vec<Operation>, output_format: OutputFormat) -> Result<(), 
         table.printstd();
     }
 
-    // let mut buffer = File::create("foo.txt")?;
     Ok(())
 }
