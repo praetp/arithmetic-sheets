@@ -1,11 +1,10 @@
 
-use std::{fmt, error::Error};
+use std::{fmt::{self}, error::Error, io};
 
 use clap::Parser;
+use prettytable::{Table, format, row};
 use rand::{seq::SliceRandom, thread_rng};
 
-extern crate tinytemplate;
-use tinytemplate::TinyTemplate;
 use serde::{Serialize};
 
 #[derive(clap::ValueEnum, Clone, Debug,  Copy, PartialEq)]
@@ -40,26 +39,43 @@ impl Serialize for Operator {
     }
 }
 
-#[derive(Parser, Debug)]
+
+#[derive(clap::ValueEnum, Clone, PartialEq)]
+enum OutputFormat {
+    Html,
+    Table
+}
+
+
+#[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[arg(long, default_value_t = 0)]
     min_first_operand: i32,
 
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = 100)]
     max_first_operand: i32,
 
     #[arg(long, default_value_t = 0)]
     min_second_operand: i32,
 
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = 100)]
     max_second_operand: i32,
+
+    #[arg(long, default_value_t = i32::MIN)]
+    min_result: i32,
+
+    #[arg(long, default_value_t = i32::MAX)]
+    max_result: i32,
 
     #[arg(long, value_enum)]
     operator: Operator,
     
     #[arg(short, long, default_value_t = 10)]
-    count: usize
+    count: usize,
+
+    #[arg(long, value_enum)]
+    output_format: OutputFormat
 }
 
 #[derive(Serialize)]
@@ -69,50 +85,69 @@ struct Operation {
     ops: Operator
 }
 
-fn build_operation(a: i32, b: i32, ops: Operator) -> Option<Operation> {
-    if ops == Operator::Division {
-        if b == 0 {
+impl fmt::Display for Operation { 
+    
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+       write!(f, "{} {} {} = ...", self.a, self.ops, self.b)
+    }
+}
+
+
+fn build_operation(a: i32, b: i32, ops: Operator, min_result: i32, max_result: i32) -> Option<Operation> {
+    let operation = if ops == Operator::Division {
+        if b == 0 { //no divide by zero
             None
         }
-        else if a % b == 0 {
+        else if a % b == 0 { //only if remainder is zero
             Some(Operation{a, b, ops})
         } else {
             None
         }
     } else {
         Some(Operation{a, b, ops})
-    }
+    };
+
+    if operation.is_some() {
+        let result = match ops {
+            Operator::Plus => a + b,
+            Operator::Minus => a -b,
+            Operator::Multiplication => a * b,
+            Operator::Division => a / b
+        };
+        if min_result <= result && result <= max_result {
+            operation
+        } else {
+            None
+        }
+        
+   } else {
+       operation   
+   }
+   
 }
-
-
-#[derive(Serialize)]
-struct Context {
-    operations: Vec<Operation>
-}
-
-
-static TEMPLATE : &'static str = r##"
-<html>
-<body>
-{{ for operation in operations }}
-<p>{operation.a} {operation.ops} {operation.b} = ...</p>
-{{ endfor }}
-</body>
-</html>
-
-"##;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    let Args { min_first_operand, max_first_operand, min_second_operand, max_second_operand, operator, count } = args;
+    let Args { min_first_operand, max_first_operand, min_second_operand, max_second_operand, 
+        min_result, max_result, operator, count, output_format } = args;
 
+    if min_first_operand >= max_first_operand {
+        Err("min_first_operand must be > max_first_operand")?
+    }
 
+    if min_second_operand >= max_second_operand {
+        Err("min_second_operand must be > max_second_operand")?
+    }
+
+    if min_result >= max_result {
+        Err("min_result must be > max_result")?
+    }
 
     let mut operations = Vec::new();
-    for a in min_first_operand..max_first_operand {
-        for b in min_second_operand..max_second_operand {
-            if let Some(ops) = build_operation(a, b, operator) {
+    for a in min_first_operand..max_first_operand+1 {
+        for b in min_second_operand..max_second_operand+1 {
+            if let Some(ops) = build_operation(a, b, operator, min_result, max_result) {
                 operations.push(ops);
             }
         }
@@ -125,19 +160,40 @@ fn main() -> Result<(), Box<dyn Error>> {
     // operations
     // .iter()
     // .for_each(|ops| println!("{} {} {} = ...", ops.a, ops.ops, ops.b));
-    
-
-    let mut tt = TinyTemplate::new();
-    tt.add_template("output", TEMPLATE)?;
-
-    let context = Context {
-        operations: operations
-    };
-
-    let rendered = tt.render("output", &context)?;
-    println!("{}", rendered);
-
+    write(operations, output_format)?;
+   
 
     Ok(())
     
+}
+
+fn write(operations: Vec<Operation>, output_format: OutputFormat) -> Result<(), Box<dyn Error>> {
+    let mut table = Table::new();
+    let format = format::FormatBuilder::new()
+        .column_separator('|')
+        .borders('|')
+        .separators(&[format::LinePosition::Top,
+                      format::LinePosition::Bottom],
+                    format::LineSeparator::new('-', '+', '+', '+'))
+        .padding(1, 4)
+        .build();
+    table.set_format(format);
+    
+    // table.set_titles(row!["Title 1", "Title 2"]);
+    let chunks = operations.chunks_exact(3);
+    for chunk in chunks {
+        table.add_row(row![chunk[0], chunk[1], chunk[2]]);
+    }
+   
+
+    if output_format == OutputFormat::Html {
+        let mut stdout = io::stdout().lock();
+        table.print_html( &mut stdout)?;
+
+    } else if output_format == OutputFormat::Table {
+        table.printstd();
+    }
+
+    // let mut buffer = File::create("foo.txt")?;
+    Ok(())
 }
