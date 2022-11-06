@@ -85,7 +85,7 @@ impl fmt::Display for Operation {
 fn build_operation(a: i32, b: i32, ops: Operator, min_result: i32, max_result: i32) -> Option<Operation> {
     let operation = match ops {
         Operator::Plus | Operator::Minus | Operator::Multiplication => Some(Operation{a, b, ops}),
-        Operator::Division if (b != 0 && a & b == 0) => Some(Operation{a, b, ops}),
+        Operator::Division if (b != 0 && a % b == 0) => Some(Operation{a, b, ops}),
         Operator::Euclid if (b != 0) => Some(Operation{a, b, ops}),
         _ => None
     };
