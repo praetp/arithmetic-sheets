@@ -9,7 +9,8 @@ enum Operator {
     Plus,
     Minus,
     Multiplication,
-    Division
+    Division,
+    Euclid
 }
 
 impl fmt::Display for Operator {
@@ -19,6 +20,8 @@ impl fmt::Display for Operator {
         Operator::Minus => write!(f, "-"),
         Operator::Multiplication => write!(f, "x"),
         Operator::Division => write!(f, ":"),
+        Operator::Euclid => write!(f, ":"),
+
        }
     }
 }
@@ -70,23 +73,21 @@ struct Operation {
 impl fmt::Display for Operation { 
     
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-       write!(f, "{} {} {} = ...", self.a, self.ops, self.b)
+        match self.ops {            
+            Operator::Euclid => write!(f, "{} {} {} = ... q ... r", self.a, self.ops, self.b),
+                          _  => write!(f, "{} {} {} = ...", self.a, self.ops, self.b)
+   
+           }
     }
 }
 
 
 fn build_operation(a: i32, b: i32, ops: Operator, min_result: i32, max_result: i32) -> Option<Operation> {
-    let operation = if ops == Operator::Division {
-        if b == 0 { //no divide by zero
-            None
-        }
-        else if a % b == 0 { //only if remainder is zero
-            Some(Operation{a, b, ops})
-        } else {
-            None
-        }
-    } else {
-        Some(Operation{a, b, ops})
+    let operation = match ops {
+        Operator::Plus | Operator::Minus | Operator::Multiplication => Some(Operation{a, b, ops}),
+        Operator::Division if (b != 0 && a & b == 0) => Some(Operation{a, b, ops}),
+        Operator::Euclid if (b != 0) => Some(Operation{a, b, ops}),
+        _ => None
     };
 
     if operation.is_some() {
@@ -94,7 +95,8 @@ fn build_operation(a: i32, b: i32, ops: Operator, min_result: i32, max_result: i
             Operator::Plus => a + b,
             Operator::Minus => a -b,
             Operator::Multiplication => a * b,
-            Operator::Division => a / b
+            Operator::Division => a / b,
+            Operator::Euclid => a / b
         };
         if min_result <= result && result <= max_result {
             operation
